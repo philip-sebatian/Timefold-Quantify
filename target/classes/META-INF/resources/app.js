@@ -260,17 +260,80 @@ function renderRoutes(solution) {
     });
     // Route
     routeGroup.clearLayers();
-    const visitByIdMap = new Map(solution.visits.map(visit => [visit.id, visit]));
-    for (let vehicle of solution.vehicles) {
-        const homeLocation = vehicle.homeLocation;
-        const locations = vehicle.visits.map(visitId => visitByIdMap.get(visitId).location);
-        L.polyline([homeLocation, ...locations, homeLocation], { color: colorByVehicle(vehicle).bg }).addTo(routeGroup);
+    if (useRoadNetwork) {
+        fetchAndDrawRoadRoutes(solution);
+    } else {
+        const visitByIdMap = new Map(solution.visits.map(visit => [visit.id, visit]));
+        for (let vehicle of solution.vehicles) {
+            const homeLocation = vehicle.homeLocation;
+            const locations = vehicle.visits.map(visitId => visitByIdMap.get(visitId).location);
+            L.polyline([homeLocation, ...locations, homeLocation], { color: colorByVehicle(vehicle).bg }).addTo(routeGroup);
+        }
     }
 
     // Summary
     $('#score').text(solution.score);
     $("#info").text(`This dataset has ${solution.visits.length} visits who need to be assigned to ${solution.vehicles.length} vehicles.`);
     $('#drivingTime').text(formatDrivingTime(solution.totalDrivingTimeSeconds));
+}
+
+let useRoadNetwork = false;
+const routeCache = new Map(); // Key: "lat1,lng1;lat2,lng2", Value: [[lat,lng], ...]
+
+$('#roadViewToggle').change(function () {
+    useRoadNetwork = this.checked;
+    if (loadedRoutePlan) {
+        renderRoutes(loadedRoutePlan);
+    }
+});
+
+function fetchAndDrawRoadRoutes(solution) {
+    const visitByIdMap = new Map(solution.visits.map(visit => [visit.id, visit]));
+
+    solution.vehicles.forEach(vehicle => {
+        const color = colorByVehicle(vehicle).bg;
+        const locations = [vehicle.homeLocation];
+        vehicle.visits.forEach(visitId => {
+            locations.push(visitByIdMap.get(visitId).location);
+        });
+        locations.push(vehicle.homeLocation);
+
+        drawRoadRoute(locations, color);
+    });
+}
+
+function drawRoadRoute(locations, color) {
+    if (locations.length < 2) return;
+
+    // Split into segments to allow caching per leg (optional, but easier cache key management if we did leg by leg)
+    // For simplicity, we'll request the whole vehicle route from OSRM if it's not too long.
+    // OSRM demo server might reject long URLs, so per-leg is safer.
+
+    for (let i = 0; i < locations.length - 1; i++) {
+        const start = locations[i];
+        const end = locations[i + 1];
+        const cacheKey = `${start[0]},${start[1]};${end[0]},${end[1]}`;
+
+        if (routeCache.has(cacheKey)) {
+            L.polyline(routeCache.get(cacheKey), { color: color, weight: 4, opacity: 0.8 }).addTo(routeGroup);
+        } else {
+            // Use backend proxy to avoid CORS/Network issues
+            const url = `/route-proxy?startLat=${start[0]}&startLng=${start[1]}&endLat=${end[0]}&endLng=${end[1]}`;
+
+            $.get(url, function (data) {
+                if (data.routes && data.routes.length > 0) {
+                    const coordinates = data.routes[0].geometry.coordinates;
+                    // GeoJSON is lng,lat. Leaflet needs lat,lng
+                    const latLngs = coordinates.map(coord => [coord[1], coord[0]]);
+                    routeCache.set(cacheKey, latLngs);
+                    L.polyline(latLngs, { color: color, weight: 4, opacity: 0.8 }).addTo(routeGroup);
+                }
+            }).fail(function (jqXHR, textStatus, errorThrown) {
+                console.warn("Proxy fetch failed:", textStatus, errorThrown, "URL:", url);
+                L.polyline([start, end], { color: color, dashArray: '5, 10' }).addTo(routeGroup);
+            });
+        }
+    }
 }
 
 function renderTimelines(routePlan) {

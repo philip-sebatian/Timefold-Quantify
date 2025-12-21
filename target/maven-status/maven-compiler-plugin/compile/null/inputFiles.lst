@@ -9,6 +9,7 @@
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/dto/VehicleRecommendation.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/geo/DrivingTimeCalculator.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/geo/HaversineDrivingTimeCalculator.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/RouteProxyResource.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/VehicleRouteDemoResource.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/VehicleRoutePlanResource.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/exception/ErrorInfo.java
