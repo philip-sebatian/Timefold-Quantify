@@ -1,0 +1,7 @@
+/home/philipsebastian/WorkFiles/vehicle-routing/src/test/java/org/acme/vehiclerouting/domain/geo/HaversineDrivingTimeCalculatorTest.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/test/java/org/acme/vehiclerouting/domain/jackson/VRPScoreAnalysisJacksonDeserializer.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/test/java/org/acme/vehiclerouting/domain/jackson/VRPScoreAnalysisJacksonModule.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/test/java/org/acme/vehiclerouting/rest/VehicleRoutingEnvironmentTest.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/test/java/org/acme/vehiclerouting/rest/VehicleRoutingPlanResourceTest.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/test/java/org/acme/vehiclerouting/rest/VehicleRoutingResourceIT.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/test/java/org/acme/vehiclerouting/solver/VehicleRoutingConstraintProviderTest.java

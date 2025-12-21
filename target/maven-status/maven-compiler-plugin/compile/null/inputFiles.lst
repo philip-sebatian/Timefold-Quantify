@@ -1,0 +1,17 @@
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/Location.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/LocationAware.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/LocationDistanceMeter.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/Vehicle.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/VehicleRoutePlan.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/Visit.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/dto/ApplyRecommendationRequest.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/dto/RecommendationRequest.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/dto/VehicleRecommendation.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/geo/DrivingTimeCalculator.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/domain/geo/HaversineDrivingTimeCalculator.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/VehicleRouteDemoResource.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/VehicleRoutePlanResource.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/exception/ErrorInfo.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/exception/VehicleRoutingSolverException.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/exception/VehicleRoutingSolverExceptionMapper.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/solver/VehicleRoutingConstraintProvider.java
