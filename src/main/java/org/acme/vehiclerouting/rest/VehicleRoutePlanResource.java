@@ -96,6 +96,10 @@ public class VehicleRoutePlanResource {
         @Consumes({ MediaType.APPLICATION_JSON })
         @Produces(MediaType.TEXT_PLAIN)
         public String solve(VehicleRoutePlan problem) {
+                LOGGER.info("Received request to solve plan: {}, vehicles: {}, visits: {}",
+                                problem.getName(),
+                                problem.getVehicles().size(),
+                                problem.getVisits().size());
                 String jobId = UUID.randomUUID().toString();
                 initMaps(problem);
 
@@ -247,6 +251,7 @@ public class VehicleRoutePlanResource {
                 List<Location> locations = Stream.concat(
                                 problem.getVehicles().stream().map(Vehicle::getHomeLocation),
                                 problem.getVisits().stream().map(Visit::getLocation))
+                                .distinct()
                                 .toList();
                 drivingTimeCalculator.initDrivingTimeMaps(locations);
         }

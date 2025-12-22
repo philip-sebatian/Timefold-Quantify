@@ -10,6 +10,8 @@ const solveButton = $('#solveButton');
 const stopSolvingButton = $('#stopSolvingButton');
 const vehiclesTable = $('#vehicles');
 const analyzeButton = $('#analyzeButton');
+const uploadCsvButton = $('#uploadCsvButton');
+const clearPointsButton = $('#clearPointsButton');
 
 /*************************************** Map constants and variable definitions  **************************************/
 
@@ -79,6 +81,8 @@ $(document).ready(function () {
     solveButton.click(solve);
     stopSolvingButton.click(stopSolving);
     analyzeButton.click(analyze);
+    uploadCsvButton.click(uploadCsv);
+    clearPointsButton.click(clearPoints);
     refreshSolvingButtons(false);
 
     // HACK to allow vis-timeline to work within Bootstrap tabs
@@ -558,8 +562,8 @@ function updateSolutionWithNewVisit(newSolution) {
 
 function setupAjax() {
     $.ajaxSetup({
+        contentType: 'application/json',
         headers: {
-            'Content-Type': 'application/json',
             'Accept': 'application/json,text/plain', // plain text is required by solve() returning UUID of the solver job
         }
     });
@@ -584,6 +588,10 @@ function setupAjax() {
 }
 
 function solve() {
+    if (!loadedRoutePlan) {
+        alert("No data to solve. Please upload a dataset or select demo data.");
+        return;
+    }
     $.post("/route-plans", JSON.stringify(loadedRoutePlan), function (data) {
         scheduleId = data;
         refreshSolvingButtons(true);
@@ -664,10 +672,9 @@ function fetchDemoData() {
             });
         });
 
-        demoDataId = data[0];
-        switchDataDropDownItemActive(demoDataId);
-
-        refreshRoutePlan();
+        // demoDataId = data[0];
+        // switchDataDropDownItemActive(demoDataId);
+        // refreshRoutePlan();
     }).fail(function (xhr, ajaxOptions, thrownError) {
         // disable this page as there is no data
         $("#demo").empty();
@@ -691,3 +698,120 @@ function copyTextToClipboard(id) {
     document.execCommand("copy");
     document.body.removeChild(dummy);
 }
+
+
+
+// We must delete the Content-Type header so the browser sets the correct multipart boundary
+function uploadCsv() {
+    const vehiclesFile = $('#vehiclesFile')[0].files[0];
+    const visitsFile = $('#visitsFile')[0].files[0];
+
+    if (!vehiclesFile || !visitsFile) {
+        alert("Please select both Vehicles CSV and Visits CSV files.");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("vehicles", vehiclesFile);
+    formData.append("visits", visitsFile);
+
+    $.ajax({
+        url: "/upload-data",
+        type: "POST",
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function (data) {
+            // Clear existing data to avoid ID collisions and visual artifacts
+            loadedRoutePlan = null;
+            scheduleId = null;
+            demoDataId = null;
+            initialized = false;
+
+            visitGroup.clearLayers();
+            homeLocationGroup.clearLayers();
+            routeGroup.clearLayers();
+
+            visitMarkerByIdMap.clear();
+            homeLocationMarkerByIdMap.clear();
+            routeCache.clear();
+
+            byVehicleGroupData.clear();
+            byVisitGroupData.clear();
+            byVehicleItemData.clear();
+            byVisitItemData.clear();
+
+            vehiclesTable.children().remove();
+            // Reset colors
+            COLOR_MAP.clear();
+
+            updateSolutionWithNewVisit(data);
+        },
+        error: function (xhr, status, error) {
+            alert("Upload failed: " + xhr.status + " " + xhr.statusText + "\n" + xhr.responseText);
+        }
+    });
+}
+
+function clearPoints() {
+    loadedRoutePlan = null;
+    scheduleId = null;
+    demoDataId = null;
+    initialized = false;
+
+    // Clear map layers
+    visitGroup.clearLayers();
+    homeLocationGroup.clearLayers();
+    routeGroup.clearLayers();
+
+    // Clear maps
+    visitMarkerByIdMap.clear();
+    homeLocationMarkerByIdMap.clear();
+    routeCache.clear();
+
+    // Clear timelines
+    byVehicleGroupData.clear();
+    byVisitGroupData.clear();
+    byVehicleItemData.clear();
+    byVisitItemData.clear();
+
+    // Clear vehicles table
+    vehiclesTable.children().remove();
+
+    // Reset stats
+    $('#score').text('?');
+    $('#drivingTime').text('--');
+    $("#info").text('');
+
+    refreshSolvingButtons(false);
+}
+
+$('#recenterMapButton').click(function () {
+    if (!loadedRoutePlan) {
+        return;
+    }
+
+    const bounds = L.latLngBounds();
+
+    // Add vehicle home locations to bounds
+    if (loadedRoutePlan.vehicles) {
+        loadedRoutePlan.vehicles.forEach(vehicle => {
+            if (vehicle.homeLocation) {
+                bounds.extend(vehicle.homeLocation);
+            }
+        });
+    }
+
+    // Add visits to bounds
+    if (loadedRoutePlan.visits) {
+        loadedRoutePlan.visits.forEach(visit => {
+            if (visit.location) {
+                bounds.extend(visit.location);
+            }
+        });
+    }
+
+    if (bounds.isValid()) {
+        map.flyToBounds(bounds, { padding: [50, 50], duration: 1.5 });
+    }
+});

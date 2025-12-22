@@ -270,6 +270,26 @@
       </div>
 
       <div class="sidebar-section">
+        <div class="sidebar-label">Import Data (CSV)</div>
+        <div class="mb-2">
+          <label for="vehiclesFile" class="form-label" style="font-size: 0.8rem;">Vehicles CSV</label>
+          <input class="form-control form-control-sm" type="file" id="vehiclesFile" accept=".csv">
+        </div>
+        <div class="mb-2">
+          <label for="visitsFile" class="form-label" style="font-size: 0.8rem;">Visits CSV</label>
+          <input class="form-control form-control-sm" type="file" id="visitsFile" accept=".csv">
+        </div>
+        <div class="d-grid gap-2">
+          <button id="uploadCsvButton" class="btn btn-sm btn-outline-primary shadow-sm">
+            <i class="fas fa-upload me-1"></i> Upload & Solve
+          </button>
+          <button id="clearPointsButton" class="btn btn-sm btn-outline-danger shadow-sm">
+            <i class="fas fa-trash-alt me-1"></i> Clear Points
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
         <div class="d-flex align-items-center justify-content-between mb-2">
           <span class="sidebar-label mb-0">Statistics</span>
           <button id="analyzeButton" class="btn btn-sm btn-link text-muted p-0" title="Score Analysis"><i
@@ -325,8 +345,13 @@
     <!-- Main Content -->
     <main class="main-content">
       <div class="tab-content h-100 w-100">
-        <div class="tab-pane fade show active h-100 w-100" id="mapPanel" role="tabpanel">
+        <div class="tab-pane fade show active h-100 w-100 position-relative" id="mapPanel" role="tabpanel">
           <div id="map"></div>
+          <button id="recenterMapButton" class="btn btn-light shadow-sm"
+            style="position: absolute; bottom: 20px; right: 20px; z-index: 1000; border-radius: 50%; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;"
+            title="Recenter Map">
+            <i class="fas fa-crosshairs"></i>
+          </button>
         </div>
         <!-- Vehicle Timeline Panel -->
         <div class="tab-pane fade h-100 p-4 w-100 overflow-auto" id="byVehiclePanel" role="tabpanel">

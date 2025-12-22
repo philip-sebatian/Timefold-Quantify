@@ -12,6 +12,7 @@
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/RouteProxyResource.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/VehicleRouteDemoResource.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/VehicleRoutePlanResource.java
+/home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/VehicleRouteUploadResource.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/exception/ErrorInfo.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/exception/VehicleRoutingSolverException.java
 /home/philipsebastian/WorkFiles/vehicle-routing/src/main/java/org/acme/vehiclerouting/rest/exception/VehicleRoutingSolverExceptionMapper.java
