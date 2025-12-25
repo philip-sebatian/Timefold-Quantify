@@ -18,6 +18,13 @@ const clearPointsButton = $('#clearPointsButton');
 const homeLocationMarkerByIdMap = new Map();
 const visitMarkerByIdMap = new Map();
 
+// Animation state
+const vehiclePaths = new Map(); // vehicleId -> Array of [lat, lng] (simplified path)
+const vehicleRoadSegments = new Map(); // vehicleId -> Map<segmentIndex, Array of [lat, lng]>
+let animationFrameId = null;
+let animationRunning = false;
+let animationMarkers = [];
+
 const map = L.map('map', { doubleClickZoom: false }).setView([51.505, -0.09], 13);
 const visitGroup = L.layerGroup().addTo(map);
 const homeLocationGroup = L.layerGroup().addTo(map);
@@ -29,7 +36,6 @@ const byVehiclePanel = document.getElementById("byVehiclePanel");
 const byVehicleTimelineOptions = {
     timeAxis: { scale: "hour" },
     orientation: { axis: "top" },
-    xss: { disabled: true }, // Items are XSS safe through JQuery
     stack: false,
     stackSubgroups: false,
     zoomMin: 1000 * 60 * 60, // A single hour in milliseconds
@@ -44,7 +50,6 @@ const byVisitTimelineOptions = {
     timeAxis: { scale: "hour" },
     orientation: { axis: "top" },
     verticalScroll: true,
-    xss: { disabled: true }, // Items are XSS safe through JQuery
     stack: false,
     stackSubgroups: false,
     zoomMin: 1000 * 60 * 60, // A single hour in milliseconds
@@ -94,6 +99,10 @@ $(document).ready(function () {
     })
     // Add new visit
     map.on('click', function (e) {
+        if (!loadedRoutePlan) {
+            alert("Please load a dataset first.");
+            return;
+        }
         visitMarker = L.circleMarker(e.latlng);
         visitMarker.setStyle({ color: 'green' });
         visitMarker.addTo(map);
@@ -128,6 +137,10 @@ $(document).ready(function () {
                 renderTimelines(loadedRoutePlan);
                 refreshSolvingButtons(false);
                 initialized = true;
+
+                // Clear vehicle segment cache on new file load
+                vehiclePaths.clear();
+                vehicleRoadSegments.clear();
 
                 $("#fileInput").val('');
             } catch (error) {
@@ -225,6 +238,10 @@ function renderRoutes(solution) {
         const bounds = [solution.southWestCorner, solution.northEastCorner];
         map.fitBounds(bounds);
     }
+    // Clear stored paths
+    vehiclePaths.clear();
+    vehicleRoadSegments.clear();
+
     // Vehicles
     vehiclesTable.children().remove();
     solution.vehicles.forEach(function (vehicle) {
@@ -271,6 +288,7 @@ function renderRoutes(solution) {
         for (let vehicle of solution.vehicles) {
             const homeLocation = vehicle.homeLocation;
             const locations = vehicle.visits.map(visitId => visitByIdMap.get(visitId).location);
+            vehiclePaths.set(vehicle.id, [homeLocation, ...locations, homeLocation]);
             L.polyline([homeLocation, ...locations, homeLocation], { color: colorByVehicle(vehicle).bg }).addTo(routeGroup);
         }
     }
@@ -286,10 +304,13 @@ const routeCache = new Map(); // Key: "lat1,lng1;lat2,lng2", Value: [[lat,lng], 
 
 $('#roadViewToggle').change(function () {
     useRoadNetwork = this.checked;
+    stopAnimation(); // Stop any running animation when toggling view
     if (loadedRoutePlan) {
         renderRoutes(loadedRoutePlan);
     }
 });
+
+$('#animateButton').click(animateVehicles);
 
 function fetchAndDrawRoadRoutes(solution) {
     const visitByIdMap = new Map(solution.visits.map(visit => [visit.id, visit]));
@@ -302,11 +323,17 @@ function fetchAndDrawRoadRoutes(solution) {
         });
         locations.push(vehicle.homeLocation);
 
-        drawRoadRoute(locations, color);
+        locations.push(vehicle.homeLocation);
+
+        drawRoadRoute(vehicle.id, locations, color);
     });
 }
 
-function drawRoadRoute(locations, color) {
+function drawRoadRoute(vehicleId, locations, color) {
+    if (!vehicleRoadSegments.has(vehicleId)) {
+        vehicleRoadSegments.set(vehicleId, new Map());
+    }
+    const vehicleSegments = vehicleRoadSegments.get(vehicleId);
     if (locations.length < 2) return;
 
     // Split into segments to allow caching per leg (optional, but easier cache key management if we did leg by leg)
@@ -331,13 +358,160 @@ function drawRoadRoute(locations, color) {
                     const latLngs = coordinates.map(coord => [coord[1], coord[0]]);
                     routeCache.set(cacheKey, latLngs);
                     L.polyline(latLngs, { color: color, weight: 4, opacity: 0.8 }).addTo(routeGroup);
+                    vehicleSegments.set(i, latLngs);
                 }
             }).fail(function (jqXHR, textStatus, errorThrown) {
                 console.warn("Proxy fetch failed:", textStatus, errorThrown, "URL:", url);
-                L.polyline([start, end], { color: color, dashArray: '5, 10' }).addTo(routeGroup);
+                const straightLine = [start, end];
+                L.polyline(straightLine, { color: color, dashArray: '5, 10' }).addTo(routeGroup);
+                vehicleSegments.set(i, straightLine);
             });
         }
     }
+}
+
+function stopAnimation() {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    animationRunning = false;
+    animationMarkers.forEach(marker => map.removeLayer(marker));
+    animationMarkers = [];
+}
+
+function animateVehicles() {
+    if (!loadedRoutePlan) return;
+    if (animationRunning) {
+        stopAnimation();
+        return;
+    }
+
+    animationRunning = true;
+    const vehicles = loadedRoutePlan.vehicles;
+    const duration = 10000; // Animation duration in ms
+    const startTime = performance.now();
+
+    // Prepare paths for each vehicle
+    const vehicleAnimationPaths = vehicles.map(vehicle => {
+        let path = [];
+        if (useRoadNetwork) {
+            // Reconstruct full path from segments
+            const segments = vehicleRoadSegments.get(vehicle.id);
+            if (segments) {
+                const sortedKeys = Array.from(segments.keys()).sort((a, b) => a - b);
+                sortedKeys.forEach(key => {
+                    const segment = segments.get(key);
+                    // Avoid duplicating connection points (end of A is start of B)
+                    if (path.length > 0 && segment.length > 0) {
+                        const last = path[path.length - 1];
+                        const first = segment[0];
+                        if (last[0] === first[0] && last[1] === first[1]) {
+                            path.push(...segment.slice(1));
+                        } else {
+                            path.push(...segment);
+                        }
+                    } else {
+                        path.push(...segment);
+                    }
+                });
+            }
+        } else {
+            path = vehiclePaths.get(vehicle.id);
+        }
+
+        // If path is undefined or too short, just use home location
+        if (!path || path.length < 2) {
+            path = [vehicle.homeLocation, vehicle.homeLocation];
+        }
+
+        return {
+            id: vehicle.id,
+            color: colorByVehicle(vehicle).bg,
+            path: path,
+            totalDistance: calculatePathDistance(path)
+        };
+    });
+
+    // Calculate speed based on max distance to keep animation reasonable (e.g. 10 sec for long route)
+    const maxDistance = Math.max(...vehicleAnimationPaths.map(v => v.totalDistance));
+    // Avoid division by zero
+    const targetDuration = 10000; // ms for the longest route
+    const speed = maxDistance > 0 ? maxDistance / targetDuration : 0;
+
+    // Create markers
+    vehicleAnimationPaths.forEach(v => {
+        const marker = L.circleMarker(v.path[0], {
+            radius: 6,
+            fillColor: v.color,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 1
+        }).addTo(map);
+        animationMarkers.push(marker);
+        v.marker = marker;
+    });
+
+    function animate(currentTime) {
+        if (!animationRunning) return;
+
+        const elapsed = currentTime - startTime;
+        // const progress = Math.min(elapsed / duration, 1);
+
+        let activeVehicles = 0;
+
+        vehicleAnimationPaths.forEach(v => {
+            if (v.path.length < 2) return;
+
+            // Distance covered at constant speed
+            let targetDistance = speed * elapsed;
+
+            // Cap at total distance
+            if (targetDistance >= v.totalDistance) {
+                targetDistance = v.totalDistance;
+            } else {
+                activeVehicles++;
+            }
+
+            const position = getPositionAtDistance(v.path, targetDistance);
+            v.marker.setLatLng(position);
+        });
+
+        if (activeVehicles > 0 || elapsed < targetDuration) {
+            animationFrameId = requestAnimationFrame(animate);
+        } else {
+            stopAnimation();
+        }
+    }
+
+    animationFrameId = requestAnimationFrame(animate);
+}
+
+function calculatePathDistance(latLngs) {
+    let distance = 0;
+    for (let i = 0; i < latLngs.length - 1; i++) {
+        distance += L.latLng(latLngs[i]).distanceTo(L.latLng(latLngs[i + 1]));
+    }
+    return distance;
+}
+
+function getPositionAtDistance(latLngs, targetDistance) {
+    let coveredDistance = 0;
+    for (let i = 0; i < latLngs.length - 1; i++) {
+        const p1 = L.latLng(latLngs[i]);
+        const p2 = L.latLng(latLngs[i + 1]);
+        const segmentDist = p1.distanceTo(p2);
+
+        if (coveredDistance + segmentDist >= targetDistance) {
+            const ratio = (targetDistance - coveredDistance) / segmentDist;
+            const lat = p1.lat + (p2.lat - p1.lat) * ratio;
+            const lng = p1.lng + (p2.lng - p1.lng) * ratio;
+            return [lat, lng];
+        }
+        coveredDistance += segmentDist;
+    }
+    return latLngs[latLngs.length - 1];
 }
 
 function renderTimelines(routePlan) {
@@ -349,13 +523,13 @@ function renderTimelines(routePlan) {
     $.each(routePlan.vehicles, function (index, vehicle) {
         const { totalDemand, capacity } = vehicle
         const percentage = totalDemand / capacity * 100;
-        const vehicleWithLoad = `<h5 class="card-title mb-1">vehicle-${vehicle.id}</h5>
+        const vehicleWithLoad = $(`<div><h5 class="card-title mb-1">vehicle-${vehicle.id}</h5>
                                  <div class="progress" data-bs-toggle="tooltip-load" data-bs-placement="left" 
                                       data-html="true" title="Cargo: ${totalDemand} / Capacity: ${capacity}">
                                    <div class="progress-bar" role="progressbar" style="width: ${percentage}%">
                                       ${totalDemand}/${capacity}
                                    </div>
-                                 </div>`
+                                 </div></div>`)[0];
         byVehicleGroupData.add({ id: vehicle.id, content: vehicleWithLoad });
     });
 
@@ -368,7 +542,7 @@ function renderTimelines(routePlan) {
             .append($(`<h5 class="card-title mb-1"/>`).text(`${visit.name}`));
         byVisitGroupData.add({
             id: visit.id,
-            content: visitGroupElement.html()
+            content: visitGroupElement[0]
         });
 
         // Time window per visit.
@@ -389,7 +563,7 @@ function renderTimelines(routePlan) {
             byVisitItemData.add({
                 id: visit.id + '_unassigned',
                 group: visit.id,
-                content: byJobJobElement.html(),
+                content: byJobJobElement[0],
                 start: minStartTime.toString(),
                 end: minStartTime.plus(serviceDuration).toString(),
                 style: "background-color: #EF292999"
@@ -416,7 +590,7 @@ function renderTimelines(routePlan) {
                 id: visit.id + '_travel',
                 group: visit.vehicle, // visit.vehicle is the vehicle.id due to Jackson serialization
                 subgroup: visit.vehicle,
-                content: byVehicleTravelElement.html(),
+                content: byVehicleTravelElement[0],
                 start: previousDeparture.toString(),
                 end: visit.arrivalTime,
                 style: "background-color: #f7dd8f90"
@@ -429,7 +603,7 @@ function renderTimelines(routePlan) {
                     id: visit.id + '_wait',
                     group: visit.vehicle, // visit.vehicle is the vehicle.id due to Jackson serialization
                     subgroup: visit.vehicle,
-                    content: byVehicleWaitElement.html(),
+                    content: byVehicleWaitElement[0],
                     start: visit.arrivalTime,
                     end: visit.minStartTime
                 });
@@ -440,7 +614,7 @@ function renderTimelines(routePlan) {
                 id: visit.id + '_service',
                 group: visit.vehicle, // visit.vehicle is the vehicle.id due to Jackson serialization
                 subgroup: visit.vehicle,
-                content: byVehicleElement.html(),
+                content: byVehicleElement[0],
                 start: visit.startServiceTime,
                 end: visit.departureTime,
                 style: "background-color: " + serviceElementBackground
@@ -448,7 +622,7 @@ function renderTimelines(routePlan) {
             byVisitItemData.add({
                 id: visit.id,
                 group: visit.id,
-                content: byVisitElement.html(),
+                content: byVisitElement[0],
                 start: visit.startServiceTime,
                 end: visit.departureTime,
                 style: "background-color: " + serviceElementBackground
@@ -466,7 +640,7 @@ function renderTimelines(routePlan) {
                     id: vehicle.id + '_travelBackToHomeLocation',
                     group: vehicle.id, // visit.vehicle is the vehicle.id due to Jackson serialization
                     subgroup: vehicle.id,
-                    content: $(`<div/>`).append($(`<h5 class="card-title mb-1"/>`).text('Travel')).html(),
+                    content: $(`<div/>`).append($(`<h5 class="card-title mb-1"/>`).text('Travel'))[0],
                     start: lastVisit.departureTime,
                     end: vehicle.arrivalTime,
                     style: "background-color: #f7dd8f90"

@@ -347,11 +347,19 @@
       <div class="tab-content h-100 w-100">
         <div class="tab-pane fade show active h-100 w-100 position-relative" id="mapPanel" role="tabpanel">
           <div id="map"></div>
-          <button id="recenterMapButton" class="btn btn-light shadow-sm"
-            style="position: absolute; bottom: 20px; right: 20px; z-index: 1000; border-radius: 50%; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;"
-            title="Recenter Map">
-            <i class="fas fa-crosshairs"></i>
-          </button>
+          <div
+            style="position: absolute; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px;">
+            <button id="animateButton" class="btn btn-light shadow-sm"
+              style="border-radius: 50%; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;"
+              title="Animate Vehicles">
+              <i class="fas fa-video"></i>
+            </button>
+            <button id="recenterMapButton" class="btn btn-light shadow-sm"
+              style="border-radius: 50%; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center;"
+              title="Recenter Map">
+              <i class="fas fa-crosshairs"></i>
+            </button>
+          </div>
         </div>
         <!-- Vehicle Timeline Panel -->
         <div class="tab-pane fade h-100 p-4 w-100 overflow-auto" id="byVehiclePanel" role="tabpanel">
