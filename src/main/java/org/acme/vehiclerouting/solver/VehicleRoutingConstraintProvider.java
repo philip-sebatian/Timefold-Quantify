@@ -7,6 +7,7 @@ import ai.timefold.solver.core.api.score.stream.ConstraintProvider;
 
 import org.acme.vehiclerouting.domain.Visit;
 import org.acme.vehiclerouting.domain.Vehicle;
+import org.acme.vehiclerouting.domain.Vehicle;
 
 public class VehicleRoutingConstraintProvider implements ConstraintProvider {
 
@@ -19,6 +20,8 @@ public class VehicleRoutingConstraintProvider implements ConstraintProvider {
         return new Constraint[] {
                 vehicleCapacity(factory),
                 serviceFinishedAfterMaxEndTime(factory),
+                workTimeExceeded(factory),
+                latestArrivalExceeded(factory),
                 minimizeTravelTime(factory)
         };
     }
@@ -41,6 +44,24 @@ public class VehicleRoutingConstraintProvider implements ConstraintProvider {
                 .penalizeLong(HardSoftLongScore.ONE_HARD,
                         Visit::getServiceFinishedDelayInMinutes)
                 .asConstraint(SERVICE_FINISHED_AFTER_MAX_END_TIME);
+    }
+
+    protected Constraint workTimeExceeded(ConstraintFactory factory) {
+        return factory.forEach(Vehicle.class)
+                .filter(vehicle -> vehicle.getMaxWorkTimeSeconds() > 0 
+                        && vehicle.getTotalDrivingTimeSeconds() > vehicle.getMaxWorkTimeSeconds())
+                .penalizeLong(HardSoftLongScore.ONE_HARD,
+                        vehicle -> vehicle.getTotalDrivingTimeSeconds() - vehicle.getMaxWorkTimeSeconds())
+                .asConstraint("workTimeExceeded");
+    }
+
+    protected Constraint latestArrivalExceeded(ConstraintFactory factory) {
+        return factory.forEach(Vehicle.class)
+                .filter(vehicle -> vehicle.getLatestArrivalTime() != null 
+                        && vehicle.arrivalTime().isAfter(vehicle.getLatestArrivalTime()))
+                .penalizeLong(HardSoftLongScore.ONE_HARD,
+                        vehicle -> java.time.Duration.between(vehicle.getLatestArrivalTime(), vehicle.arrivalTime()).toMinutes())
+                .asConstraint("latestArrivalExceeded");
     }
 
     // ************************************************************************

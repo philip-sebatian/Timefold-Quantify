@@ -251,7 +251,6 @@ public class VehicleRoutePlanResource {
                 List<Location> locations = Stream.concat(
                                 problem.getVehicles().stream().map(Vehicle::getHomeLocation),
                                 problem.getVisits().stream().map(Visit::getLocation))
-                                .distinct()
                                 .toList();
                 drivingTimeCalculator.initDrivingTimeMaps(locations);
         }

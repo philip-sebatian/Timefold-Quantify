@@ -43,6 +43,7 @@ public class VehicleRoutePlan {
 
     private LocalDateTime endDateTime;
 
+
     @PlanningEntityCollectionProperty
     private List<Vehicle> vehicles;
 
@@ -59,6 +60,12 @@ public class VehicleRoutePlan {
     private String scoreExplanation;
 
     public VehicleRoutePlan() {
+    }
+
+    @ai.timefold.solver.core.api.domain.solution.ProblemFactProperty
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public VehicleRoutePlan getThis() {
+        return this;
     }
 
     public VehicleRoutePlan(String name, HardSoftLongScore score, SolverStatus solverStatus) {
@@ -103,6 +110,8 @@ public class VehicleRoutePlan {
     public LocalDateTime getEndDateTime() {
         return endDateTime;
     }
+
+
 
     public List<Vehicle> getVehicles() {
         return vehicles;

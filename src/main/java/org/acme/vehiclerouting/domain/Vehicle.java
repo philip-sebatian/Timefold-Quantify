@@ -25,6 +25,9 @@ public class Vehicle implements LocationAware {
     private Location homeLocation;
 
     private LocalDateTime departureTime;
+    private LocalDateTime latestArrivalTime;
+    
+    private long maxWorkTimeSeconds;
 
     @JsonIdentityReference(alwaysAsId = true)
     @PlanningListVariable
@@ -34,10 +37,20 @@ public class Vehicle implements LocationAware {
     }
 
     public Vehicle(String id, int capacity, Location homeLocation, LocalDateTime departureTime) {
+        this(id, capacity, homeLocation, departureTime, null, 0L);
+    }
+
+    public Vehicle(String id, int capacity, Location homeLocation, LocalDateTime departureTime, long maxWorkTimeSeconds) {
+        this(id, capacity, homeLocation, departureTime, null, maxWorkTimeSeconds);
+    }
+
+    public Vehicle(String id, int capacity, Location homeLocation, LocalDateTime departureTime, LocalDateTime latestArrivalTime, long maxWorkTimeSeconds) {
         this.id = id;
         this.capacity = capacity;
         this.homeLocation = homeLocation;
         this.departureTime = departureTime;
+        this.latestArrivalTime = latestArrivalTime;
+        this.maxWorkTimeSeconds = maxWorkTimeSeconds;
         this.visits = new ArrayList<>();
     }
 
@@ -67,6 +80,22 @@ public class Vehicle implements LocationAware {
 
     public LocalDateTime getDepartureTime() {
         return departureTime;
+    }
+
+    public LocalDateTime getLatestArrivalTime() {
+        return latestArrivalTime;
+    }
+
+    public void setLatestArrivalTime(LocalDateTime latestArrivalTime) {
+        this.latestArrivalTime = latestArrivalTime;
+    }
+
+    public long getMaxWorkTimeSeconds() {
+        return maxWorkTimeSeconds;
+    }
+
+    public void setMaxWorkTimeSeconds(long maxWorkTimeSeconds) {
+        this.maxWorkTimeSeconds = maxWorkTimeSeconds;
     }
 
     public List<Visit> getVisits() {

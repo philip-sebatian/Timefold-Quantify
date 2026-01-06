@@ -126,4 +126,34 @@ class VehicleRoutingConstraintProviderTest {
             }
         }
     }
+    @Test
+    void workTimeExceeded() {
+        LocalDateTime tomorrow_08_00 = LocalDateTime.of(TOMORROW, LocalTime.of(8, 0));
+        LocalDateTime tomorrow_09_00 = LocalDateTime.of(TOMORROW, LocalTime.of(9, 0));
+        LocalDateTime tomorrow_10_00 = LocalDateTime.of(TOMORROW, LocalTime.of(10, 0));
+        
+        // Vehicle with max work time of 100 seconds
+        Vehicle vehicle = new Vehicle("1", 100, LOCATION_1, tomorrow_08_00);
+        vehicle.setMaxWorkTimeSeconds(100L);
+        
+        // Visit takes 30 mins (1800s) + travel time
+        // LOCATION_1 -> LOCATION_2 is ~843s
+        Visit visit1 = new Visit("2", "John", LOCATION_2, 80, tomorrow_08_00, tomorrow_10_00, Duration.ofMinutes(30L));
+        vehicle.getVisits().add(visit1);
+        
+        // Total time = 843 (travel) + 843 (return) = 1686 > 100
+        constraintVerifier.verifyThat(VehicleRoutingConstraintProvider::workTimeExceeded)
+                .given(vehicle, visit1)
+                .penalizesBy(1686L - 100L);
+                
+        // Vehicle without limit (0)
+        Vehicle vehicleNoLimit = new Vehicle("2", 100, LOCATION_1, tomorrow_08_00);
+        vehicleNoLimit.setMaxWorkTimeSeconds(0L); // Unlimited
+        vehicleNoLimit.getVisits().add(visit1);
+        
+        constraintVerifier.verifyThat(VehicleRoutingConstraintProvider::workTimeExceeded)
+                .given(vehicleNoLimit, visit1)
+                .penalizesBy(0);
+    }
+
 }

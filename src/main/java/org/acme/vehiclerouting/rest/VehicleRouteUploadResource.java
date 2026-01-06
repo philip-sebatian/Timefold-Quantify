@@ -131,11 +131,23 @@ public class VehicleRouteUploadResource {
                 double lat = Double.parseDouble(record.get("home_latitude"));
                 double lng = Double.parseDouble(record.get("home_longitude"));
                 LocalDateTime departureTime = LocalDateTime.parse(record.get("departure_time"));
+                
+                LocalDateTime latestArrivalTime = null;
+                if (record.isMapped("latest_arrival_time") && record.get("latest_arrival_time") != null && !record.get("latest_arrival_time").isEmpty()) {
+                    latestArrivalTime = LocalDateTime.parse(record.get("latest_arrival_time"));
+                }
+
+                long maxWorkTimeSeconds = 0;
+                if (record.isMapped("max_work_time_minutes") && record.get("max_work_time_minutes") != null && !record.get("max_work_time_minutes").isEmpty()) {
+                     maxWorkTimeSeconds = Long.parseLong(record.get("max_work_time_minutes")) * 60;
+                } else if (record.isMapped("max_duration_hours") && record.get("max_duration_hours") != null && !record.get("max_duration_hours").isEmpty()) {
+                     maxWorkTimeSeconds = (long) (Double.parseDouble(record.get("max_duration_hours")) * 3600);
+                }
 
                 Location tempLoc = new Location(lat, lng);
                 Location homeLocation = locationMap.computeIfAbsent(tempLoc, k -> k);
 
-                Vehicle vehicle = new Vehicle(id, capacity, homeLocation, departureTime);
+                Vehicle vehicle = new Vehicle(id, capacity, homeLocation, departureTime, latestArrivalTime, maxWorkTimeSeconds);
                 vehicles.add(vehicle);
             }
         }

@@ -77,6 +77,40 @@ function pickColor(object) {
 
 /************************************ Initialize ************************************/
 
+function showToast(message, type = 'info') {
+    const toastId = 'toast-' + Date.now();
+    const icon = type === 'danger' ? 'fa-exclamation-circle' : (type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle');
+    const color = type === 'danger' ? 'text-danger' : (type === 'warning' ? 'text-warning' : 'text-primary');
+
+    const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body d-flex align-items-center gap-2">
+                    <i class="fas ${icon} ${color} fa-lg"></i>
+                    <div>${message}</div>
+                </div>
+                <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+
+    $('#toastContainer').append(toastHtml);
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 5000 });
+    toast.show();
+
+    // Cleanup after hidden
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
+
+function showError(title, xhr) {
+    const errorMsg = xhr ? (xhr.responseText || xhr.statusText || "Unknown error") : "";
+    const message = title + (errorMsg ? " " + errorMsg : "");
+    showToast(message, 'danger');
+}
+
 $(document).ready(function () {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
@@ -86,6 +120,7 @@ $(document).ready(function () {
     solveButton.click(solve);
     stopSolvingButton.click(stopSolving);
     analyzeButton.click(analyze);
+    $('#dashboardButton').click(showDashboard);
     uploadCsvButton.click(uploadCsv);
     clearPointsButton.click(clearPoints);
     refreshSolvingButtons(false);
@@ -100,7 +135,7 @@ $(document).ready(function () {
     // Add new visit
     map.on('click', function (e) {
         if (!loadedRoutePlan) {
-            alert("Please load a dataset first.");
+            showToast("Please load a dataset first.", "warning");
             return;
         }
         visitMarker = L.circleMarker(e.latlng);
@@ -144,7 +179,7 @@ $(document).ready(function () {
 
                 $("#fileInput").val('');
             } catch (error) {
-                alert("Error parsing JSON file: " + error);
+                showError("Error parsing JSON file: " + error);
             }
         };
         reader.readAsText(file);
@@ -248,7 +283,7 @@ function renderRoutes(solution) {
         let marker = getHomeLocationMarker(vehicle);
         marker.setPopupContent(homeLocationPopupContent(vehicle));
         marker.setLatLng(vehicle.homeLocation);
-        const { id, capacity, totalDemand, totalDrivingTimeSeconds } = vehicle;
+        const { id, capacity, totalDemand, totalDrivingTimeSeconds, maxWorkTimeSeconds } = vehicle;
         const percentage = totalDemand / capacity * 100;
         const color = colorByVehicle(vehicle);
         vehiclesTable.append(`
@@ -261,6 +296,7 @@ function renderRoutes(solution) {
         <td class="align-middle">
             <div class="fw-bold" style="font-size: 0.9rem;">Vehicle ${id}</div>
             <div class="text-muted" style="font-size: 0.75rem;">${formatDrivingTime(totalDrivingTimeSeconds)}</div>
+
         </td>
         <td class="align-middle">
           <div class="d-flex align-items-center">
@@ -284,10 +320,13 @@ function renderRoutes(solution) {
     if (useRoadNetwork) {
         fetchAndDrawRoadRoutes(solution);
     } else {
-        const visitByIdMap = new Map(solution.visits.map(visit => [visit.id, visit]));
+        const visitByIdMap = new Map(solution.visits.map(visit => [String(visit.id), visit]));
         for (let vehicle of solution.vehicles) {
             const homeLocation = vehicle.homeLocation;
-            const locations = vehicle.visits.map(visitId => visitByIdMap.get(visitId).location);
+            const locations = vehicle.visits
+                .map(visitId => visitByIdMap.get(String(visitId)))
+                .filter(visit => visit != null)
+                .map(visit => visit.location);
             vehiclePaths.set(vehicle.id, [homeLocation, ...locations, homeLocation]);
             L.polyline([homeLocation, ...locations, homeLocation], { color: colorByVehicle(vehicle).bg }).addTo(routeGroup);
         }
@@ -313,13 +352,16 @@ $('#roadViewToggle').change(function () {
 $('#animateButton').click(animateVehicles);
 
 function fetchAndDrawRoadRoutes(solution) {
-    const visitByIdMap = new Map(solution.visits.map(visit => [visit.id, visit]));
+    const visitByIdMap = new Map(solution.visits.map(visit => [String(visit.id), visit]));
 
     solution.vehicles.forEach(vehicle => {
         const color = colorByVehicle(vehicle).bg;
         const locations = [vehicle.homeLocation];
         vehicle.visits.forEach(visitId => {
-            locations.push(visitByIdMap.get(visitId).location);
+            const visit = visitByIdMap.get(String(visitId));
+            if (visit) {
+                locations.push(visit.location);
+            }
         });
         locations.push(vehicle.homeLocation);
 
@@ -660,6 +702,150 @@ function analyze() {
     analyzeScore(loadedRoutePlan, "/route-plans/analyze")
 }
 
+let vehicleChartInstance = null;
+let loadDistChartInstance = null;
+
+function showDashboard() {
+    if (!loadedRoutePlan || !loadedRoutePlan.vehicles || loadedRoutePlan.vehicles.length === 0) {
+        showToast("No data available. Please upload and optimize a route first.", "warning");
+        return;
+    }
+
+    // Check if optimized (basic check: do we have visits assigned?)
+    const activeVehicles = loadedRoutePlan.vehicles.filter(v => v.visits && v.visits.length > 0);
+    if (activeVehicles.length === 0 && loadedRoutePlan.visits && loadedRoutePlan.visits.length > 0) {
+        showToast("Optimization not started. Please click 'Optimize Route' first.", "warning");
+        return;
+    }
+
+
+    // 1. Calculate Metrics
+    const totalVehicles = loadedRoutePlan.vehicles.length;
+    const totalVisits = loadedRoutePlan.visits ? loadedRoutePlan.visits.length : 0;
+
+    let totalCapacity = 0;
+    let totalLoad = 0;
+    let totalDrivingTime = 0;
+
+    const labels = [];
+    const loadData = [];
+    const capacityData = [];
+    const timeData = [];
+
+    loadedRoutePlan.vehicles.forEach(v => {
+        totalCapacity += v.capacity;
+        totalLoad += v.totalDemand;
+        totalDrivingTime += v.totalDrivingTimeSeconds;
+
+        labels.push(`V${v.id}`);
+        loadData.push(v.totalDemand);
+        capacityData.push(v.capacity);
+        timeData.push((v.totalDrivingTimeSeconds / 3600).toFixed(1)); // Hours
+    });
+
+    const avgUtil = totalCapacity > 0 ? ((totalLoad / totalCapacity) * 100).toFixed(1) : 0;
+    // Estimate distance (very rough, assuming 60km/h avg speed if proper distance not available)
+    // In real app, we might have meters. Here we have seconds. Let's assume 50km/h for display.
+    const estDistanceKm = (totalDrivingTime / 3600 * 50).toFixed(0);
+
+    // 2. Update Summary Cards
+    $('#dashTotalVehicles').text(totalVehicles);
+    $('#dashTotalDistance').text(`~${estDistanceKm} km`); // Heuristic
+    $('#dashAvgUtil').text(`${avgUtil}%`);
+    $('#dashTotalVisits').text(totalVisits);
+
+    // 3. Render Charts
+    $('#dashboardModal').modal('show');
+
+    // Wait for modal to show before rendering charts to ensure canvas dimensions are correct
+    setTimeout(() => {
+        renderVehicleChart(labels, loadData, capacityData, timeData);
+        renderLoadDistChart(activeVehicles.length, totalVehicles - activeVehicles.length);
+    }, 200);
+}
+
+function renderVehicleChart(labels, loadData, capacityData, timeData) {
+    const ctx = document.getElementById('vehicleChart').getContext('2d');
+
+    if (vehicleChartInstance) {
+        vehicleChartInstance.destroy();
+    }
+
+    vehicleChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Load',
+                    data: loadData,
+                    backgroundColor: 'rgba(62, 0, 255, 0.7)',
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Capacity',
+                    data: capacityData,
+                    type: 'line',
+                    borderColor: 'rgba(52, 35, 166, 0.5)',
+                    borderDash: [5, 5],
+                    fill: false,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Driving Time (h)',
+                    data: timeData,
+                    backgroundColor: 'rgba(255, 193, 7, 0.5)',
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Load / Capacity' }
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    title: { display: true, text: 'Hours' },
+                    grid: { drawOnChartArea: false }
+                }
+            }
+        }
+    });
+}
+
+function renderLoadDistChart(activeCount, idleCount) {
+    const ctx = document.getElementById('loadDistributionChart').getContext('2d');
+
+    if (loadDistChartInstance) {
+        loadDistChartInstance.destroy();
+    }
+
+    loadDistChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Active Vehicles', 'Idle Vehicles'],
+            datasets: [{
+                data: [activeCount, idleCount],
+                backgroundColor: [
+                    'rgba(62, 0, 255, 0.7)',
+                    'rgba(233, 236, 239, 1)'
+                ],
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
+
 function openRecommendationModal(lat, lng) {
 
     if (!('score' in loadedRoutePlan) || optimizing) {
@@ -669,7 +855,7 @@ function openRecommendationModal(lat, lng) {
         if (optimizing) {
             message = "Please wait for the solving process to finish."
         }
-        alert(message);
+        showToast(message, "warning");
         return;
     }
     // see recommended-fit.js
@@ -766,6 +952,10 @@ function solve() {
         alert("No data to solve. Please upload a dataset or select demo data.");
         return;
     }
+
+    // Configuration is now applied via 'Configure Fleet' modal directly to loadedRoutePlan
+    // No need to apply on solve click anymore
+
     $.post("/route-plans", JSON.stringify(loadedRoutePlan), function (data) {
         scheduleId = data;
         refreshSolvingButtons(true);
@@ -775,6 +965,226 @@ function solve() {
     },
         "text");
 }
+
+/* 
+ * Configuration is handled by Fleet Modal
+ */
+function applyConfiguration(count, capacity) {
+    // Deprecated
+}
+
+$('#configureFleetButton').click(openFleetConfigModal);
+$('.dashboard-btn').click(showDashboard);
+
+// Helper to parse LocalDateTime from String or Array
+function parseLocalDateTime(input) {
+    if (!input) return null;
+    try {
+        if (Array.isArray(input)) {
+            // [year, month, day, hour, minute, second, nano]
+            // JSJoda.LocalDateTime.of(year, month, dayOfMonth, hour, minute, second, nanoOfSecond)
+            const nano = input[6] || 0;
+            const second = input[5] || 0;
+            return JSJoda.LocalDateTime.of(input[0], input[1], input[2], input[3], input[4], second, nano);
+        } else if (typeof input === 'string') {
+            return JSJoda.LocalDateTime.parse(input);
+        }
+    } catch (e) {
+        console.error("Failed to parse date:", input, e);
+    }
+    return null;
+}
+
+// Helper to parse Location from Array or Object
+function parseLocation(input) {
+    if (!input) return { lat: 0, lng: 0 };
+    if (Array.isArray(input) && input.length >= 2) {
+        return { lat: input[0], lng: input[1] };
+    }
+    if (typeof input === 'object') {
+        const lat = input.latitude !== undefined ? input.latitude : (input.lat !== undefined ? input.lat : 0);
+        const lng = input.longitude !== undefined ? input.longitude : (input.lng !== undefined ? input.lng : 0);
+        return { lat: lat, lng: lng };
+    }
+    return { lat: 0, lng: 0 };
+}
+
+function openFleetConfigModal() {
+    if (!loadedRoutePlan) return;
+
+    // Reset warning
+    $('#fleetConfigWarning').addClass('d-none').text('');
+
+    // Set total vehicles
+    $('#totalVehiclesInput').val(loadedRoutePlan.vehicles.length);
+
+    // Populate table
+    const tbody = $('#fleetConfigTableBody');
+    tbody.empty();
+
+    loadedRoutePlan.vehicles.forEach(vehicle => {
+        // Safe access helpers
+        const loc = parseLocation(vehicle.homeLocation);
+        const lat = loc.lat;
+        const lng = loc.lng;
+
+        let startTimeStr = '';
+        let latestArrivalStr = '';
+
+        // Max Work Time in Hours (displayed with up to 1 decimal place if needed)
+        let maxWorkHours = 0;
+        if (vehicle.maxWorkTimeSeconds) {
+            maxWorkHours = parseFloat((vehicle.maxWorkTimeSeconds / 3600).toFixed(2));
+        }
+
+        try {
+            if (vehicle.departureTime) {
+                const startDateTime = parseLocalDateTime(vehicle.departureTime);
+                if (startDateTime) {
+                    // Format for datetime-local: yyyy-MM-ddTHH:mm
+                    startTimeStr = startDateTime.format(JSJoda.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm"));
+                }
+            }
+            if (vehicle.latestArrivalTime) {
+                const latestDateTime = parseLocalDateTime(vehicle.latestArrivalTime);
+                if (latestDateTime) {
+                    latestArrivalStr = latestDateTime.format(JSJoda.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm"));
+                }
+            }
+        } catch (e) {
+            console.error("Error parsing times for vehicle " + vehicle.id, e);
+        }
+
+        const row = `
+            <tr data-vehicle-id="${vehicle.id}">
+                <td>${vehicle.id}</td>
+                <td>
+                    <input type="number" class="form-control form-control-sm capacity-input" value="${vehicle.capacity}" min="1">
+                </td>
+                <td>
+                    <input type="number" step="any" class="form-control form-control-sm lat-input" value="${lat}">
+                </td>
+                <td>
+                    <input type="number" step="any" class="form-control form-control-sm lng-input" value="${lng}">
+                </td>
+                <td>
+                    <input type="datetime-local" class="form-control form-control-sm start-time-input" value="${startTimeStr}">
+                </td>
+                <td>
+                    <input type="datetime-local" class="form-control form-control-sm latest-arrival-input" value="${latestArrivalStr}">
+                </td>
+                <td>
+                    <input type="number" step="0.5" class="form-control form-control-sm max-duration-input" value="${maxWorkHours}" min="0">
+                </td>
+            </tr>
+        `;
+        tbody.append(row);
+    });
+
+    $('#fleetConfigModal').modal('show');
+}
+
+$('#saveFleetConfigButton').click(function () {
+    if (!loadedRoutePlan) return;
+
+    const newCount = parseInt($('#totalVehiclesInput').val()) || loadedRoutePlan.vehicles.length;
+    const currentCount = loadedRoutePlan.vehicles.length;
+
+    // 1. Handle Resize
+    if (newCount > currentCount) {
+        // Add vehicles
+        const lastVehicle = currentCount > 0 ? loadedRoutePlan.vehicles[currentCount - 1] : null;
+        const defaultCapacity = lastVehicle ? lastVehicle.capacity : 10;
+        const lastLoc = parseLocation(lastVehicle ? lastVehicle.homeLocation : null);
+        const defaultHome = [lastLoc.lat, lastLoc.lng];
+        const defaultDep = lastVehicle ? lastVehicle.departureTime : loadedRoutePlan.startDateTime;
+        // Default max work time to 0 if not set, or copy last
+        const defaultMaxTime = lastVehicle ? lastVehicle.maxWorkTimeSeconds : 0;
+
+        for (let i = currentCount; i < newCount; i++) {
+            const newId = String(i + 1);
+            const newVehicle = {
+                id: newId,
+                capacity: defaultCapacity,
+                homeLocation: defaultHome,
+                departureTime: defaultDep,
+                latestArrivalTime: null, // Default to null (no strict deadline)
+                maxWorkTimeSeconds: defaultMaxTime,
+                visits: [],
+                totalDemand: 0,
+                totalDrivingTimeSeconds: 0
+            };
+            loadedRoutePlan.vehicles.push(newVehicle);
+        }
+    } else if (newCount < currentCount) {
+        loadedRoutePlan.vehicles.length = newCount;
+    }
+
+    // 2. Update Properties from Table
+    let validationErrors = [];
+
+    $('#fleetConfigTableBody tr').each(function () {
+        const id = $(this).data('vehicle-id');
+        const vehicle = loadedRoutePlan.vehicles.find(v => v.id === String(id));
+        if (vehicle) {
+            // Capacity
+            const cap = parseInt($(this).find('.capacity-input').val()) || 0;
+            vehicle.capacity = cap;
+
+            // Location
+            const lat = parseFloat($(this).find('.lat-input').val());
+            const lng = parseFloat($(this).find('.lng-input').val());
+            if (!isNaN(lat) && !isNaN(lng)) {
+                vehicle.homeLocation = [lat, lng];
+            }
+
+            // Times
+            const startTimeVal = $(this).find('.start-time-input').val(); // "yyyy-MM-ddTHH:mm"
+            const latestArrivalVal = $(this).find('.latest-arrival-input').val(); // "yyyy-MM-ddTHH:mm"
+            const maxDurationHours = parseFloat($(this).find('.max-duration-input').val()) || 0;
+
+            let startDateTime = null;
+            let latestArrivalDateTime = null;
+
+            if (startTimeVal) {
+                // Parse ISO string
+                startDateTime = JSJoda.LocalDateTime.parse(startTimeVal);
+                vehicle.departureTime = startDateTime.toString();
+            }
+
+            if (latestArrivalVal) {
+                latestArrivalDateTime = JSJoda.LocalDateTime.parse(latestArrivalVal);
+                vehicle.latestArrivalTime = latestArrivalDateTime.toString();
+            } else {
+                vehicle.latestArrivalTime = null;
+            }
+
+            vehicle.maxWorkTimeSeconds = Math.round(maxDurationHours * 3600);
+
+            // Validation: Start vs Latest Arrival vs Max Duration
+            if (startDateTime && latestArrivalDateTime && vehicle.maxWorkTimeSeconds > 0) {
+                const windowSeconds = JSJoda.Duration.between(startDateTime, latestArrivalDateTime).seconds();
+                if (windowSeconds > vehicle.maxWorkTimeSeconds) {
+                    validationErrors.push(`Vehicle ${id}: Window (${(windowSeconds / 3600).toFixed(1)}h) exceeds Max Work Time (${maxDurationHours}h). Consider increasing Max Duration or adjusting times.`);
+                }
+
+                if (windowSeconds < 0) {
+                    validationErrors.push(`Vehicle ${id}: Latest Arrival is before Start Time.`);
+                }
+            }
+        }
+    });
+
+    if (validationErrors.length > 0) {
+        const errorHtml = "<strong>Please check the following warnings:</strong><br>" + validationErrors.join("<br>");
+        $('#fleetConfigWarning').html(errorHtml).removeClass('d-none');
+        // We do NOT close the modal if there are warnings!
+        return;
+    }
+
+    $('#fleetConfigModal').modal('hide');
+    renderRoutes(loadedRoutePlan);
+});
 
 function refreshSolvingButtons(solving) {
     optimizing = solving;
@@ -800,7 +1210,7 @@ function refreshRoutePlan() {
     let path = "/route-plans/" + scheduleId;
     if (scheduleId === null) {
         if (demoDataId === null) {
-            alert("Please select a test data set.");
+            showToast("Please select a test data set.", "warning");
             return;
         }
 
@@ -881,7 +1291,7 @@ function uploadCsv() {
     const visitsFile = $('#visitsFile')[0].files[0];
 
     if (!vehiclesFile || !visitsFile) {
-        alert("Please select both Vehicles CSV and Visits CSV files.");
+        showToast("Please select both Vehicles CSV and Visits CSV files.", "warning");
         return;
     }
 
@@ -920,9 +1330,10 @@ function uploadCsv() {
             COLOR_MAP.clear();
 
             updateSolutionWithNewVisit(data);
+            openFleetConfigModal();
         },
         error: function (xhr, status, error) {
-            alert("Upload failed: " + xhr.status + " " + xhr.statusText + "\n" + xhr.responseText);
+            showError("Upload failed: " + xhr.status + " " + xhr.statusText + "\n" + xhr.responseText);
         }
     });
 }
