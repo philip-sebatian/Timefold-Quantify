@@ -759,12 +759,14 @@ function showDashboard() {
 
     // Wait for modal to show before rendering charts to ensure canvas dimensions are correct
     setTimeout(() => {
-        renderVehicleChart(labels, loadData, capacityData, timeData);
+        // Pass validation of raw seconds for tooltip
+        const rawTimeSeconds = loadedRoutePlan.vehicles.map(v => v.totalDrivingTimeSeconds);
+        renderVehicleChart(labels, loadData, capacityData, timeData, rawTimeSeconds);
         renderLoadDistChart(activeVehicles.length, totalVehicles - activeVehicles.length);
     }, 200);
 }
 
-function renderVehicleChart(labels, loadData, capacityData, timeData) {
+function renderVehicleChart(labels, loadData, capacityData, timeData, rawTimeSeconds) {
     const ctx = document.getElementById('vehicleChart').getContext('2d');
 
     if (vehicleChartInstance) {
@@ -801,6 +803,28 @@ function renderVehicleChart(labels, loadData, capacityData, timeData) {
         },
         options: {
             responsive: true,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.dataset.yAxisID === 'y1') {
+                                // Use the raw seconds to format this exactly like the sidebar
+                                const seconds = rawTimeSeconds[context.dataIndex];
+                                return label + formatDrivingTime(seconds);
+                            }
+                            return label + context.formattedValue;
+                        }
+                    }
+                }
+            },
             scales: {
                 y: {
                     beginAtZero: true,
