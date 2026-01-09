@@ -59,8 +59,35 @@ const byVisitGroupData = new vis.DataSet();
 const byVisitItemData = new vis.DataSet();
 const byVisitTimeline = new vis.Timeline(byVisitPanel, byVisitItemData, byVisitGroupData, byVisitTimelineOptions);
 
-const BG_COLORS = ["#009E73", "#0072B2", "#D55E00", "#000000", "#CC79A7", "#E69F00", "#F0E442", "#F6768E", "#C10020", "#A6BDD7", "#803E75", "#007D34", "#56B4E9", "#999999", "#8DD3C7", "#FFD92F", "#B3DE69", "#FB8072", "#80B1D3", "#B15928", "#CAB2D6", "#1B9E77", "#E7298A", "#6A3D9A"];
-const FG_COLORS = ["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#000000", "#000000", "#FFFFFF", "#FFFFFF", "#000000", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#000000", "#000000", "#000000", "#000000", "#FFFFFF", "#000000", "#FFFFFF", "#000000", "#FFFFFF", "#FFFFFF", "#FFFFFF"];
+// Bright/Neon colors for Dark Mode visibility
+const BG_COLORS = [
+    "#00FFFF", // Cyan
+    "#FF00FF", // Magenta
+    "#FFFF00", // Yellow
+    "#00FF00", // Lime
+    "#FF4500", // OrangeRed
+    "#1E90FF", // DodgerBlue
+    "#FF1493", // DeepPink
+    "#00FA9A", // MediumSpringGreen
+    "#FFD700", // Gold
+    "#FF69B4", // HotPink
+    "#ADFF2F", // GreenYellow
+    "#00BFFF", // DeepSkyBlue
+    "#FF6347", // Tomato
+    "#7FFF00", // Chartreuse
+    "#BA55D3", // MediumOrchid
+    "#40E0D0", // Turquoise
+    "#F0E68C", // Khaki
+    "#EE82EE", // Violet
+    "#98FB98", // PaleGreen
+    "#87CEEB", // SkyBlue
+    "#FFB6C1", // LightPink
+    "#D8BFD8", // Thistle
+    "#E0FFFF", // LightCyan
+    "#F0FFF0"  // Honeydew
+];
+// Text color should generally be black for these bright backgrounds
+const FG_COLORS = Array(24).fill("#000000");
 let COLOR_MAP = new Map()
 let nextColorIndex = 0
 
@@ -336,6 +363,69 @@ function renderRoutes(solution) {
     $('#score').text(solution.score);
     $("#info").text(`This dataset has ${solution.visits.length} visits who need to be assigned to ${solution.vehicles.length} vehicles.`);
     $('#drivingTime').text(formatDrivingTime(solution.totalDrivingTimeSeconds));
+
+    checkUnassignedVisits(solution);
+}
+
+function checkUnassignedVisits(solution) {
+    const assignedVisitIds = new Set();
+    solution.vehicles.forEach(v => {
+        if (v.visits) {
+            v.visits.forEach(visitOrId => {
+                const id = visitOrId.id !== undefined ? visitOrId.id : visitOrId;
+                assignedVisitIds.add(String(id));
+            });
+        }
+    });
+
+    const unassignedCount = solution.visits.filter(v => !assignedVisitIds.has(String(v.id))).length;
+
+    const panel = $('#notificationPanel');
+    panel.empty();
+
+    if (unassignedCount > 0) {
+        panel.append(`
+            <div class="alert alert-warning p-2 shadow-sm text-start" style="background-color: #332b00; border-color: #665500; color: #ffda6a;">
+                <div class="fw-bold mb-1"><i class="fas fa-exclamation-triangle"></i> ${unassignedCount} Unassigned Visits</div>
+                <div class="small mb-2" style="font-size: 0.75rem;">Constraints (Capacity/Time) prevented assignment. Test adding a vehicle?</div>
+                <button onclick="autoFixUnassigned()" class="btn btn-sm btn-outline-warning w-100">
+                    <i class="fas fa-magic me-1"></i> Auto-Add Vehicle & Solve
+                </button>
+            </div>
+        `);
+    }
+}
+
+function autoFixUnassigned() {
+    if (!loadedRoutePlan) return;
+
+    const currentCount = loadedRoutePlan.vehicles.length;
+    const lastVehicle = currentCount > 0 ? loadedRoutePlan.vehicles[currentCount - 1] : null;
+
+    // Default clone logic from saveFleetConfig
+    const defaultCapacity = lastVehicle ? lastVehicle.capacity : 10;
+    const loc = parseLocation(lastVehicle ? lastVehicle.homeLocation : null);
+    const defaultHome = [loc.lat, loc.lng];
+    const defaultDep = lastVehicle ? lastVehicle.departureTime : loadedRoutePlan.startDateTime;
+    const defaultMaxTime = lastVehicle ? lastVehicle.maxWorkTimeSeconds : 0;
+
+    const newId = String(currentCount + 1);
+    const newVehicle = {
+        id: newId,
+        capacity: defaultCapacity,
+        homeLocation: defaultHome,
+        departureTime: defaultDep,
+        latestArrivalTime: null,
+        maxWorkTimeSeconds: defaultMaxTime,
+        visits: [],
+        totalDemand: 0,
+        totalDrivingTimeSeconds: 0
+    };
+
+    loadedRoutePlan.vehicles.push(newVehicle);
+
+    showToast(`Added Vehicle ${newId}. Re-solving...`, "info");
+    solve();
 }
 
 let useRoadNetwork = false;
