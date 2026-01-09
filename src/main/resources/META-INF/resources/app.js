@@ -112,7 +112,7 @@ function showError(title, xhr) {
 }
 
 $(document).ready(function () {
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(map);
@@ -1033,20 +1033,25 @@ function parseLocation(input) {
     return { lat: 0, lng: 0 };
 }
 
-function openFleetConfigModal() {
-    if (!loadedRoutePlan) return;
+function openFleetConfigModal(isStaged = false) {
+    const planToConfigure = isStaged ? window.stagedRoutePlan : loadedRoutePlan;
+
+    if (!planToConfigure) return;
+
+    // Store state on modal so Save knows what we are editing
+    $('#fleetConfigModal').data('isStaged', isStaged);
 
     // Reset warning
     $('#fleetConfigWarning').addClass('d-none').text('');
 
     // Set total vehicles
-    $('#totalVehiclesInput').val(loadedRoutePlan.vehicles.length);
+    $('#totalVehiclesInput').val(planToConfigure.vehicles.length);
 
     // Populate table
     const tbody = $('#fleetConfigTableBody');
     tbody.empty();
 
-    loadedRoutePlan.vehicles.forEach(vehicle => {
+    planToConfigure.vehicles.forEach(vehicle => {
         // Safe access helpers
         const loc = parseLocation(vehicle.homeLocation);
         const lat = loc.lat;
@@ -1109,19 +1114,23 @@ function openFleetConfigModal() {
 }
 
 $('#saveFleetConfigButton').click(function () {
-    if (!loadedRoutePlan) return;
+    const isStaged = $('#fleetConfigModal').data('isStaged');
+    // If not staged, use loaded. If staged, use staged.
+    const planToConfigure = isStaged ? window.stagedRoutePlan : loadedRoutePlan;
 
-    const newCount = parseInt($('#totalVehiclesInput').val()) || loadedRoutePlan.vehicles.length;
-    const currentCount = loadedRoutePlan.vehicles.length;
+    if (!planToConfigure) return;
+
+    const newCount = parseInt($('#totalVehiclesInput').val()) || planToConfigure.vehicles.length;
+    const currentCount = planToConfigure.vehicles.length;
 
     // 1. Handle Resize
     if (newCount > currentCount) {
         // Add vehicles
-        const lastVehicle = currentCount > 0 ? loadedRoutePlan.vehicles[currentCount - 1] : null;
+        const lastVehicle = currentCount > 0 ? planToConfigure.vehicles[currentCount - 1] : null;
         const defaultCapacity = lastVehicle ? lastVehicle.capacity : 10;
         const lastLoc = parseLocation(lastVehicle ? lastVehicle.homeLocation : null);
         const defaultHome = [lastLoc.lat, lastLoc.lng];
-        const defaultDep = lastVehicle ? lastVehicle.departureTime : loadedRoutePlan.startDateTime;
+        const defaultDep = lastVehicle ? lastVehicle.departureTime : planToConfigure.startDateTime;
         // Default max work time to 0 if not set, or copy last
         const defaultMaxTime = lastVehicle ? lastVehicle.maxWorkTimeSeconds : 0;
 
@@ -1138,10 +1147,10 @@ $('#saveFleetConfigButton').click(function () {
                 totalDemand: 0,
                 totalDrivingTimeSeconds: 0
             };
-            loadedRoutePlan.vehicles.push(newVehicle);
+            planToConfigure.vehicles.push(newVehicle);
         }
     } else if (newCount < currentCount) {
-        loadedRoutePlan.vehicles.length = newCount;
+        planToConfigure.vehicles.length = newCount;
     }
 
     // 2. Update Properties from Table
@@ -1149,7 +1158,7 @@ $('#saveFleetConfigButton').click(function () {
 
     $('#fleetConfigTableBody tr').each(function () {
         const id = $(this).data('vehicle-id');
-        const vehicle = loadedRoutePlan.vehicles.find(v => v.id === String(id));
+        const vehicle = planToConfigure.vehicles.find(v => v.id === String(id));
         if (vehicle) {
             // Capacity
             const cap = parseInt($(this).find('.capacity-input').val()) || 0;
@@ -1206,8 +1215,22 @@ $('#saveFleetConfigButton').click(function () {
         return;
     }
 
+    // If it was staged, now we apply it to the main loadedRoutePlan and render!
+    if (isStaged) {
+        // We need to commit the staged plan
+        // Clear old data first
+        clearPoints(); // Clears loadedRoutePlan etc.
+
+        // Promote staged to loaded
+        updateSolutionWithNewVisit(planToConfigure);
+        window.stagedRoutePlan = null;
+
+    } else {
+        // Just rerender existing
+        renderRoutes(loadedRoutePlan);
+    }
+
     $('#fleetConfigModal').modal('hide');
-    renderRoutes(loadedRoutePlan);
 });
 
 function refreshSolvingButtons(solving) {
@@ -1330,31 +1353,16 @@ function uploadCsv() {
         processData: false,
         contentType: false,
         success: function (data) {
-            // Clear existing data to avoid ID collisions and visual artifacts
-            loadedRoutePlan = null;
-            scheduleId = null;
-            demoDataId = null;
-            initialized = false;
+            // Stage the data but DO NOT render it yet
+            // We use a temporary variable for the staged plan
+            window.stagedRoutePlan = data;
 
-            visitGroup.clearLayers();
-            homeLocationGroup.clearLayers();
-            routeGroup.clearLayers();
+            // Clear existing data only visually if needed, or keep old data until save? 
+            // User requirement: "if we click save ... display in map. else it should stay as is"
+            // So we do NOT clear existing data here.
 
-            visitMarkerByIdMap.clear();
-            homeLocationMarkerByIdMap.clear();
-            routeCache.clear();
-
-            byVehicleGroupData.clear();
-            byVisitGroupData.clear();
-            byVehicleItemData.clear();
-            byVisitItemData.clear();
-
-            vehiclesTable.children().remove();
-            // Reset colors
-            COLOR_MAP.clear();
-
-            updateSolutionWithNewVisit(data);
-            openFleetConfigModal();
+            // Open Fleet Config Modal with the STAGED data
+            openFleetConfigModal(true); // pass true to indicate we are configuring STAGED data
         },
         error: function (xhr, status, error) {
             showError("Upload failed: " + xhr.status + " " + xhr.statusText + "\n" + xhr.responseText);
