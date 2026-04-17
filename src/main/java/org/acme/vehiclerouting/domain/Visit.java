@@ -27,9 +27,39 @@ public class Visit implements LocationAware {
     private String name;
     private Location location;
     private int demand;
+    /**
+     * Pre-assigned station for this delivery visit.
+     * The station constraint uses this to ensure only vehicles from the same
+     * station can be assigned to this visit.
+     * Null means no station restriction (backward-compatible).
+     * Added as part of the 3-level hierarchy (Stations → Vehicles → Visits) refactoring.
+     */
+    private String stationId;
     private LocalDateTime minStartTime;
     private LocalDateTime maxEndTime;
     private Duration serviceDuration;
+
+    /**
+     * Delivery type: "ambient", "refrigerated", "frozen", "standard".
+     * Used by vehicleTypeCompatibility constraint to match visit with capable vehicle.
+     * Null means no compatibility restriction (backward-compatible).
+     */
+    private String commodityTag;
+
+    /**
+     * Order priority: "prime" or "standard".
+     * Prime orders are enforced as a dedicated hard constraint (primeOrderTimeWindow)
+     * in addition to the general serviceFinishedAfterMaxEndTime constraint.
+     * Null means standard priority (no extra prime penalty).
+     */
+    private String speedTag;
+
+    /**
+     * Perishable expiration deadline (nullable).
+     * When set, the solver enforces: arrivalTime + serviceDuration < expirationTime.
+     * Null means the visit has no expiration constraint (backward-compatible).
+     */
+    private LocalDateTime expirationTime;
 
     @JsonIdentityReference(alwaysAsId = true)
     @InverseRelationShadowVariable(sourceVariableName = "visits")
@@ -81,6 +111,38 @@ public class Visit implements LocationAware {
 
     public void setDemand(int demand) {
         this.demand = demand;
+    }
+
+    public String getStationId() {
+        return stationId;
+    }
+
+    public void setStationId(String stationId) {
+        this.stationId = stationId;
+    }
+
+    public String getCommodityTag() {
+        return commodityTag;
+    }
+
+    public void setCommodityTag(String commodityTag) {
+        this.commodityTag = commodityTag;
+    }
+
+    public String getSpeedTag() {
+        return speedTag;
+    }
+
+    public void setSpeedTag(String speedTag) {
+        this.speedTag = speedTag;
+    }
+
+    public LocalDateTime getExpirationTime() {
+        return expirationTime;
+    }
+
+    public void setExpirationTime(LocalDateTime expirationTime) {
+        this.expirationTime = expirationTime;
     }
 
     public LocalDateTime getMinStartTime() {
@@ -161,6 +223,30 @@ public class Visit implements LocationAware {
             return 0;
         }
         return roundDurationToNextOrEqualMinutes(Duration.between(maxEndTime, arrivalTime.plus(serviceDuration)));
+    }
+
+    /**
+     * Returns true when this visit is perishable (has an expirationTime) and service
+     * finishes after the expiration deadline: arrivalTime + serviceDuration > expirationTime.
+     * Used by the perishableExpiryConstraint hard constraint.
+     */
+    @JsonIgnore
+    public boolean isServiceFinishedAfterExpirationTime() {
+        return expirationTime != null
+                && arrivalTime != null
+                && arrivalTime.plus(serviceDuration).isAfter(expirationTime);
+    }
+
+    /**
+     * Returns minutes past the expiration deadline (always >= 1 when positive).
+     * Used by the perishableExpiryConstraint hard constraint for penalty scoring.
+     */
+    @JsonIgnore
+    public long getExpirationDelayInMinutes() {
+        if (arrivalTime == null || expirationTime == null) {
+            return 0;
+        }
+        return roundDurationToNextOrEqualMinutes(Duration.between(expirationTime, arrivalTime.plus(serviceDuration)));
     }
 
     private static long roundDurationToNextOrEqualMinutes(Duration duration) {

@@ -19,6 +19,8 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.acme.vehiclerouting.domain.Location;
+import org.acme.vehiclerouting.domain.Station;
 import org.acme.vehiclerouting.domain.Vehicle;
 import org.acme.vehiclerouting.domain.VehicleRoutePlan;
 import org.acme.vehiclerouting.domain.Visit;
@@ -248,9 +250,16 @@ public class VehicleRoutePlanResource {
         }
 
         private void initMaps(VehicleRoutePlan problem) {
+                // Ensure station locations are included so home locations derived from stations have their driving map initialized
+                Stream<Location> stationLocations = problem.getStations() != null
+                        ? problem.getStations().stream().map(Station::getLocation)
+                        : Stream.empty();
+
                 List<Location> locations = Stream.concat(
-                                problem.getVehicles().stream().map(Vehicle::getHomeLocation),
-                                problem.getVisits().stream().map(Visit::getLocation))
+                                stationLocations,
+                                Stream.concat(
+                                                problem.getVehicles().stream().map(Vehicle::getHomeLocation),
+                                                problem.getVisits().stream().map(Visit::getLocation)))
                                 .toList();
                 drivingTimeCalculator.initDrivingTimeMaps(locations);
         }

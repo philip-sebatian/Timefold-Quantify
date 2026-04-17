@@ -1,0 +1,6 @@
+station_id,station_name,station_lat,station_lon,opening_time,closing_time
+KAR-DS,Karama Post Office,25.243,55.308,2026-05-15T06:00:00,2026-05-15T22:00:00
+KAB-DS,Al Barsha Branch,25.114,55.206,2026-05-15T06:00:00,2026-05-15T22:00:00
+JUM-DS,Jumeirah Post Office,25.204,55.253,2026-05-15T06:00:00,2026-05-15T22:00:00
+QUS-DS,Al Qusais Post Office,25.277,55.369,2026-05-15T06:00:00,2026-05-15T22:00:00
+NAH-DS,Al Nahda Service Point,25.298,55.368,2026-05-15T06:00:00,2026-05-15T22:00:00

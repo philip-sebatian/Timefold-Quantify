@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Orion - Login</title>
+    <link rel="stylesheet" href="/webjars/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/webjars/font-awesome/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orion-black: #121212;
+            --orion-dark-gray: #1e1e1e;
+            --orion-yellow: #FFD700;
+            --orion-text: #ffffff;
+        }
+
+        body {
+            background-color: var(--orion-black);
+            color: var(--orion-text);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background-color: var(--orion-dark-gray);
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .brand {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--orion-yellow);
+            text-align: center;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .form-control {
+            background-color: #2c2c2c;
+            border: 1px solid #444;
+            color: white;
+        }
+
+        .form-control:focus {
+            background-color: #2c2c2c;
+            border-color: var(--orion-yellow);
+            color: white;
+            box-shadow: 0 0 0 0.25rem rgba(255, 215, 0, 0.25);
+        }
+
+        .btn-orion {
+            background-color: var(--orion-yellow);
+            color: black;
+            font-weight: 700;
+            border: none;
+            width: 100%;
+            padding: 0.75rem;
+            margin-top: 1rem;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        .btn-orion:hover {
+            background-color: #e6c200;
+            transform: translateY(-2px);
+        }
+
+        .error-msg {
+            color: #ff6b6b;
+            text-align: center;
+            margin-top: 1rem;
+            display: none;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="login-card">
+        <div class="brand">
+            <i class="fas fa-truck-fast"></i> ORION
+        </div>
+        <form id="loginForm">
+            <div class="mb-3">
+                <label for="username" class="form-label text-muted">Username</label>
+                <input type="text" class="form-control" id="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label text-muted">Password</label>
+                <input type="password" class="form-control" id="password" required>
+            </div>
+            <button type="submit" class="btn btn-orion">LOGIN</button>
+            <div class="error-msg" id="errorMsg">Invalid Credentials</div>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const errorMsg = document.getElementById('errorMsg');
+
+            if (u === 'orion' && p === 'orion') {
+                sessionStorage.setItem('isLoggedIn', 'true');
+                window.location.href = '/';
+            } else {
+                errorMsg.style.display = 'block';
+                // Shake effect
+                const btn = document.querySelector('.btn-orion');
+                btn.classList.add('shake');
+                setTimeout(() => btn.classList.remove('shake'), 500);
+            }
+        });
+
+        // Simple check if already logged in
+        if (sessionStorage.getItem('isLoggedIn') === 'true') {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+
+</html>

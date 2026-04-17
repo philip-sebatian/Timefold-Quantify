@@ -29,9 +29,10 @@ public interface DrivingTimeCalculator {
     default Map<Location, Map<Location, Long>> calculateBulkDrivingTime(
             Collection<Location> fromLocations,
             Collection<Location> toLocations) {
-        return fromLocations.stream().collect(Collectors.toMap(
+        java.util.List<Location> distinctTo = toLocations.stream().distinct().toList();
+        return fromLocations.stream().distinct().collect(Collectors.toMap(
                 Function.identity(),
-                from -> toLocations.stream().collect(Collectors.toMap(
+                from -> distinctTo.stream().collect(Collectors.toMap(
                         Function.identity(),
                         to -> calculateDrivingTime(from, to)))));
     }

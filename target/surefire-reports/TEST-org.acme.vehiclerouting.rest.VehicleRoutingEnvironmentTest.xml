@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report.xsd" version="3.0.2" name="org.acme.vehiclerouting.rest.VehicleRoutingEnvironmentTest" time="0.027" tests="2" errors="0" skipped="2" failures="0">
+  <properties/>
+  <testcase name="solveStepAssert" classname="org.acme.vehiclerouting.rest.VehicleRoutingEnvironmentTest" time="0.0">
+    <skipped message="System property [slowly] does not exist"/>
+    <system-err><![CDATA[Apr 11, 2026 3:18:37 PM org.jboss.threads.Version <clinit>
+INFO: JBoss Threads version 3.9.1
+]]></system-err>
+  </testcase>
+  <testcase name="solveFullAssert" classname="org.acme.vehiclerouting.rest.VehicleRoutingEnvironmentTest" time="0.0">
+    <skipped message="System property [slowly] does not exist"/>
+  </testcase>
+</testsuite>

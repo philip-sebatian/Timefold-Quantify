@@ -439,6 +439,16 @@
           <div id="collapseImport" class="accordion-collapse collapse show" aria-labelledby="headingImport"
             data-bs-parent="#sidebarAccordion">
             <div class="accordion-body px-0 pt-0 pb-2">
+              <!-- Stations CSV (optional) — enables 3-level hierarchy (Stations → Vehicles → Visits).
+                   When provided, vehicle home locations are derived from station coordinates and the
+                   station hard constraint is activated in the optimizer. -->
+              <div class="mb-2">
+                <label for="stationsFile" class="form-label"
+                  style="font-size: 0.8rem; color: var(--orion-text);">Stations CSV <span
+                    style="font-size: 0.7rem; color: var(--orion-text-muted);">(optional)</span></label>
+                <input class="form-control form-control-sm bg-dark text-white border-secondary" type="file"
+                  id="stationsFile" accept=".csv">
+              </div>
               <div class="mb-2">
                 <label for="vehiclesFile" class="form-label"
                   style="font-size: 0.8rem; color: var(--orion-text);">Vehicles CSV</label>

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.PrimitiveIterator;
 import java.util.Random;
@@ -202,7 +203,7 @@ public class VehicleRouteDemoResource {
 
         return new VehicleRoutePlan(name, demoData.southWestCorner, demoData.northEastCorner,
                 tomorrowAt(demoData.vehicleStartTime), tomorrowAt(LocalTime.MIDNIGHT).plusDays(1L),
-                vehicles, visits);
+                vehicles, visits, Collections.emptyList());
     }
 
     private static LocalDateTime tomorrowAt(LocalTime time) {

@@ -26,8 +26,23 @@ public class Vehicle implements LocationAware {
 
     private LocalDateTime departureTime;
     private LocalDateTime latestArrivalTime;
-    
+
     private long maxWorkTimeSeconds;
+
+    /**
+     * Station constraint hint — used by the solver to restrict cross-station vehicle-visit
+     * assignments. A vehicle may only serve visits whose stationId matches this field.
+     * Null means no station restriction applies (backward-compatible).
+     * Added as part of the 3-level hierarchy (Stations → Vehicles → Visits) refactoring.
+     */
+    private String stationId;
+
+    /**
+     * Vehicle specialisation/capability type: "ambient", "refrigerated", "frozen", "standard".
+     * Used by the vehicleTypeCompatibility hard constraint to match vehicles to compatible deliveries.
+     * Null means no restriction — the vehicle can serve all order types (backward-compatible).
+     */
+    private String specialisationOfVehicle;
 
     @JsonIdentityReference(alwaysAsId = true)
     @PlanningListVariable
@@ -104,6 +119,22 @@ public class Vehicle implements LocationAware {
 
     public void setVisits(List<Visit> visits) {
         this.visits = visits;
+    }
+
+    public String getStationId() {
+        return stationId;
+    }
+
+    public void setStationId(String stationId) {
+        this.stationId = stationId;
+    }
+
+    public String getSpecialisationOfVehicle() {
+        return specialisationOfVehicle;
+    }
+
+    public void setSpecialisationOfVehicle(String specialisationOfVehicle) {
+        this.specialisationOfVehicle = specialisationOfVehicle;
     }
 
     // ************************************************************************

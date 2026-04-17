@@ -25,10 +25,17 @@ let animationFrameId = null;
 let animationRunning = false;
 let animationMarkers = [];
 
-const map = L.map('map', { doubleClickZoom: false }).setView([51.505, -0.09], 13);
+// Map default center reconfigured to Dubai, UAE (25.2048, 55.2708) as per geospatial requirement.
+// Previous value was London [51.505, -0.09] which was incorrect for Dubai deployments.
+const map = L.map('map', { doubleClickZoom: false }).setView([25.2048, 55.2708], 11);
 const visitGroup = L.layerGroup().addTo(map);
 const homeLocationGroup = L.layerGroup().addTo(map);
 const routeGroup = L.layerGroup().addTo(map);
+// Station layer: red markers rendered on top of routes but below visit/vehicle markers
+const stationGroup = L.layerGroup().addTo(map);
+
+// Track station markers by station id (mirrors homeLocationMarkerByIdMap pattern)
+const stationMarkerByIdMap = new Map();
 
 /************************************ Time line constants and variable definitions ************************************/
 
@@ -229,6 +236,49 @@ function homeLocationPopupContent(vehicle) {
 Home Location`;
 }
 
+/**
+ * Popup content for a station marker.
+ * Shows the station name plus aggregated counts of vehicles and visits assigned to it.
+ * Counts are derived at render time from the current loadedRoutePlan.
+ */
+function stationPopupContent(station, solution) {
+    const vehicleCount = solution.vehicles
+        ? solution.vehicles.filter(v => v.stationId === station.id).length
+        : 0;
+    const visitCount = solution.visits
+        ? solution.visits.filter(v => v.stationId === station.id).length
+        : 0;
+    return `<h5>${station.name}</h5>
+    <h6>Station ID: ${station.id}</h6>
+    <h6>Vehicles assigned: <strong>${vehicleCount}</strong></h6>
+    <h6>Visits assigned: <strong>${visitCount}</strong></h6>`;
+}
+
+/**
+ * Returns (creating if necessary) the Leaflet marker for a station.
+ * Station markers are RED (#dc3545) per the spec color-coding:
+ * Stations=Red, Vehicles=Green, Visits=Blue.
+ * Markers are NOT draggable — stations are fixed infrastructure.
+ */
+function getStationMarker(station) {
+    let marker = stationMarkerByIdMap.get(station.id);
+    if (marker) {
+        return marker;
+    }
+    marker = L.marker(station.location, {
+        icon: L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div style="background-color: #dc3545; width: 14px; height: 14px; border-radius: 50%; opacity: 0.95; border: 2px solid #fff; box-shadow: 0 0 4px rgba(220,53,69,0.7);"></div>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        }),
+        draggable: false
+    });
+    marker.addTo(stationGroup).bindPopup();
+    stationMarkerByIdMap.set(station.id, marker);
+    return marker;
+}
+
 function visitPopupContent(visit) {
     const arrival = visit.arrivalTime ? `<h6>Arrival at ${showTimeOnly(visit.arrivalTime)}.</h6>` : '';
     return `<h5>${visit.name}</h5>
@@ -249,7 +299,10 @@ function getHomeLocationMarker(vehicle) {
     marker = L.marker(vehicle.homeLocation, {
         icon: L.divIcon({
             className: 'custom-div-icon',
-            html: `<div style="background-color: ${colorByVehicle(vehicle).bg}; width: 12px; height: 12px; border-radius: 50%; opacity: 0.8; border: 1px solid #333;"></div>`,
+            // Vehicle home-location dots are fixed GREEN (#28a745) so entity type is visually
+            // distinct from visits (blue) and stations (red). Route polylines remain per-vehicle
+            // neon colors for route tracking clarity.
+            html: `<div style="background-color: #28a745; width: 12px; height: 12px; border-radius: 50%; opacity: 0.9; border: 2px solid #fff;"></div>`,
             iconSize: [12, 12],
             iconAnchor: [6, 6]
         }),
@@ -276,9 +329,11 @@ function getVisitMarker(visit) {
     marker = L.marker(visit.location, {
         icon: L.divIcon({
             className: 'custom-div-icon',
-            html: `<div style="background-color: #3388ff; width: 12px; height: 12px; border-radius: 50%; opacity: 0.8; border: 1px solid #333;"></div>`,
-            iconSize: [12, 12],
-            iconAnchor: [6, 6]
+            // Visit markers are fixed BLUE (#007bff) per the spec color-coding:
+            // Stations=Red, Vehicles=Green, Visits=Blue
+            html: `<div style="background-color: #007bff; width: 10px; height: 10px; border-radius: 50%; opacity: 0.9; border: 2px solid #fff;"></div>`,
+            iconSize: [10, 10],
+            iconAnchor: [5, 5]
         }),
         draggable: true
     });
@@ -342,6 +397,18 @@ function renderRoutes(solution) {
         marker.setPopupContent(visitPopupContent(visit));
         marker.setLatLng(visit.location);
     });
+    // Stations: render RED markers with aggregated vehicle/visit count popup.
+    // Only present when a stations CSV was uploaded (3-level hierarchy mode).
+    stationGroup.clearLayers();
+    stationMarkerByIdMap.clear();
+    if (solution.stations && solution.stations.length > 0) {
+        solution.stations.forEach(function (station) {
+            // station.location is a [lat, lng] array (same serialisation as vehicle.homeLocation)
+            let marker = getStationMarker(station);
+            marker.setPopupContent(stationPopupContent(station, solution));
+            marker.setLatLng(station.location);
+        });
+    }
     // Route
     routeGroup.clearLayers();
     if (useRoadNetwork) {
@@ -1320,6 +1387,7 @@ $('#saveFleetConfigButton').click(function () {
         renderRoutes(loadedRoutePlan);
     }
 
+    $(this).blur(); // Fix Bootstap aria-hidden warning by removing focus from this button
     $('#fleetConfigModal').modal('hide');
 });
 
@@ -1424,6 +1492,7 @@ function copyTextToClipboard(id) {
 
 // We must delete the Content-Type header so the browser sets the correct multipart boundary
 function uploadCsv() {
+    const stationsFileInput = $('#stationsFile')[0].files[0]; // Optional — activates station constraint
     const vehiclesFile = $('#vehiclesFile')[0].files[0];
     const visitsFile = $('#visitsFile')[0].files[0];
 
@@ -1433,6 +1502,13 @@ function uploadCsv() {
     }
 
     const formData = new FormData();
+
+    // Stations CSV is optional. When provided, the backend derives vehicle home locations
+    // from station coordinates and activates the station hard constraint in the optimizer.
+    if (stationsFileInput) {
+        formData.append("stations", stationsFileInput);
+    }
+
     formData.append("vehicles", vehiclesFile);
     formData.append("visits", visitsFile);
 
@@ -1470,10 +1546,14 @@ function clearPoints() {
     visitGroup.clearLayers();
     homeLocationGroup.clearLayers();
     routeGroup.clearLayers();
+    // Clear station layer (populated when stations CSV is uploaded)
+    stationGroup.clearLayers();
 
     // Clear maps
     visitMarkerByIdMap.clear();
     homeLocationMarkerByIdMap.clear();
+    // Clear station marker tracking map
+    stationMarkerByIdMap.clear();
     routeCache.clear();
 
     // Clear timelines

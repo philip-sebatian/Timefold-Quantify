@@ -48,10 +48,13 @@ public class Location {
      * Driving time to the given location in seconds.
      *
      * @param location other location
-     * @return driving time in seconds
+     * @return driving time in seconds, or 0 if distance map is uninitialized
      */
     public long getDrivingTimeTo(Location location) {
-        return drivingTimeSeconds.get(location);
+        if (drivingTimeSeconds == null) {
+            return 0L;
+        }
+        return drivingTimeSeconds.getOrDefault(location, 0L);
     }
 
     @Override

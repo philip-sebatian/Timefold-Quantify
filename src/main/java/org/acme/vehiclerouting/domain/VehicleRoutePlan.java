@@ -6,6 +6,7 @@ import java.util.List;
 import ai.timefold.solver.core.api.domain.solution.PlanningEntityCollectionProperty;
 import ai.timefold.solver.core.api.domain.solution.PlanningScore;
 import ai.timefold.solver.core.api.domain.solution.PlanningSolution;
+import ai.timefold.solver.core.api.domain.solution.ProblemFactCollectionProperty;
 import ai.timefold.solver.core.api.domain.valuerange.ValueRangeProvider;
 import ai.timefold.solver.core.api.score.buildin.hardsoftlong.HardSoftLongScore;
 import ai.timefold.solver.core.api.solver.SolverStatus;
@@ -51,6 +52,15 @@ public class VehicleRoutePlan {
     @ValueRangeProvider
     private List<Visit> visits;
 
+    /**
+     * Stations in the 3-level hierarchy (Stations → Vehicles → Visits).
+     * Declared as a ProblemFact so Timefold can reference station data in constraints.
+     * Optional: existing plans without station data continue to work (null-safe).
+     * Added as part of the Dubai 3-level hierarchy refactoring.
+     */
+    @ProblemFactCollectionProperty
+    private List<Station> stations;
+
     @PlanningScore
     private HardSoftLongScore score;
 
@@ -81,7 +91,8 @@ public class VehicleRoutePlan {
             @JsonProperty("startDateTime") LocalDateTime startDateTime,
             @JsonProperty("endDateTime") LocalDateTime endDateTime,
             @JsonProperty("vehicles") List<Vehicle> vehicles,
-            @JsonProperty("visits") List<Visit> visits) {
+            @JsonProperty("visits") List<Visit> visits,
+            @JsonProperty("stations") List<Station> stations) {
         this.name = name;
         this.southWestCorner = southWestCorner;
         this.northEastCorner = northEastCorner;
@@ -89,6 +100,8 @@ public class VehicleRoutePlan {
         this.endDateTime = endDateTime;
         this.vehicles = vehicles;
         this.visits = visits;
+        // stations may be null for backward-compatible payloads without station data
+        this.stations = stations;
     }
 
     public String getName() {
@@ -119,6 +132,14 @@ public class VehicleRoutePlan {
 
     public List<Visit> getVisits() {
         return visits;
+    }
+
+    public List<Station> getStations() {
+        return stations;
+    }
+
+    public void setStations(List<Station> stations) {
+        this.stations = stations;
     }
 
     public HardSoftLongScore getScore() {
